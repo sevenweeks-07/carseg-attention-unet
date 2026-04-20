@@ -33,37 +33,14 @@ This project implements an end-to-end car segmentation system trained on a curat
 
 ## Pipeline Architecture
 
-```
-BDD800 Dataset (800 images)
-        │
-        ▼
-┌─────────────────────────┐
-│   GAN Synthetic Data    │  ← UNet Generator + PatchGAN Discriminator
-│   Generation (1,500+)   │     Trained for 10 epochs
-└────────────┬────────────┘
-             │
-             ▼
-┌─────────────────────────┐
-│   Data Augmentation     │  ← Albumentations: flips, brightness,
-│   (Albumentations)      │     blur, noise, HSV shifts, cropping
-└────────────┬────────────┘
-             │
-             ▼
-┌─────────────────────────┐
-│   SAM Annotation        │  ← Segment Anything Model (ViT-H)
-│   (Mask Generation)     │     + YOLOv8 for car-specific prompts
-└────────────┬────────────┘
-             │
-             ▼
-┌─────────────────────────┐
-│   Attention U-Net       │  ← ResNet34 encoder (pretrained)
-│   Training (25 epochs)  │     + Attention gates + Skip connections
-└────────────┬────────────┘
-             │
-             ▼
-┌─────────────────────────┐
-│   Evaluation            │  ← IoU, Dice Coefficient, Pixel Loss
-└─────────────────────────┘
+```mermaid
+flowchart TD
+    A[BDD800 Dataset\n800 images] --> B
+    B[GAN Synthetic Data Generation\nUNet Generator + PatchGAN Discriminator\nTrained for 10 epochs] --> C
+    C[Data Augmentation\nAlbumentations: flips, brightness,\nblur, noise, HSV shifts, cropping] --> D
+    D[SAM Annotation\nSegment Anything Model ViT-H\n+ YOLOv8 for car-specific prompts] --> E
+    E[Attention U-Net Training\nResNet34 encoder pretrained\n+ Attention gates + Skip connections\n25 epochs] --> F
+    F[Evaluation\nIoU, Dice Coefficient, Pixel Loss]
 ```
 
 ---
@@ -103,28 +80,30 @@ Ground-truth segmentation masks were generated automatically using the **Segment
 
 The segmentation model is an **Attention U-Net** built on a **pretrained ResNet34 encoder**.
 
-```
-Input Image (3×H×W)
-       │
-       ▼
- ResNet34 Encoder (pretrained on ImageNet)
- ├── Layer1: 64 feature maps
- ├── Layer2: 128 feature maps
- ├── Layer3: 256 feature maps
- └── Layer4: 512 feature maps
-       │
-       ▼
-   Bottleneck
-       │
-       ▼
- Decoder with Attention Gates + Skip Connections
- ├── Up-block 1: 512→256 (+ attention gate from encoder Layer4)
- ├── Up-block 2: 256→128 (+ attention gate from encoder Layer3)
- ├── Up-block 3: 128→64  (+ attention gate from encoder Layer2)
- └── Up-block 4: 64→64  (+ attention gate from encoder Layer1)
-       │
-       ▼
- Adaptive Output Layer → Binary Mask (1×H×W)
+```mermaid
+flowchart TD
+    IN[Input Image 3 x H x W] --> E1
+    subgraph ENC[ResNet34 Encoder - ImageNet pretrained]
+        E1[Layer1: 64 feature maps]
+        E2[Layer2: 128 feature maps]
+        E3[Layer3: 256 feature maps]
+        E4[Layer4: 512 feature maps]
+        E1 --> E2 --> E3 --> E4
+    end
+    E4 --> BN[Bottleneck]
+    BN --> U1
+    subgraph DEC[Decoder with Attention Gates + Skip Connections]
+        U1[Up-block 1: 512 to 256 + attn gate Layer4]
+        U2[Up-block 2: 256 to 128 + attn gate Layer3]
+        U3[Up-block 3: 128 to 64 + attn gate Layer2]
+        U4[Up-block 4: 64 to 64 + attn gate Layer1]
+        U1 --> U2 --> U3 --> U4
+    end
+    E4 -.->|skip| U1
+    E3 -.->|skip| U2
+    E2 -.->|skip| U3
+    E1 -.->|skip| U4
+    U4 --> OUT[Binary Mask 1 x H x W]
 ```
 
 **Key Components:**
@@ -205,7 +184,7 @@ The model is specifically optimized to detect and segment **COCO class 2 (car)**
 
 ## Dependencies
 
-```txt
+```
 torch
 torchvision
 numpy
@@ -215,8 +194,8 @@ opencv-python
 albumentations
 matplotlib
 tqdm
-segment-anything      # SAM
-ultralytics           # YOLOv8
+segment-anything
+ultralytics
 ```
 
 **Pretrained Weights Required:**
